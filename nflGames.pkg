@@ -1,0 +1,669 @@
+create or replace
+PACKAGE BODY NFLGAMES AS
+	
+	procedure TEAM_RECORD(inLoc in varchar2 DEFAULT 'A') is
+	
+		invalid_loc exception;
+		
+	begin
+		DBMS_OUTPUT.PUT_LINE('inLoc:' || UPPER(inLoc) || ':test');
+		
+		if (UPPER(inLoc) not in ('R','H','A')) then
+			raise invalid_loc;
+		end if;
+			
+		DBMS_OUTPUT.PUT_LINE('VALID INPUT VALUE - CHECK TEAM RECORD: ' || inLoc);
+		
+		if (UPPER(inLoc) = 'R') then
+			ROAD_TEAM_RECORD;
+		end if;
+	
+		if (UPPER(inLoc) = 'H') then
+			HOME_TEAM_RECORD;
+		end if;
+	
+		if (UPPER(inLoc) = 'A') then
+			ALL_TEAM_RECORD;
+		end if;
+	
+	exception
+		when invalid_loc then
+			DBMS_OUTPUT.PUT_LINE('IN EXCEPTION - NOT VALID INPUT VALUE... EXITING STORED PROCEDURE...');
+			DBMS_OUTPUT.PUT_LINE('VALID INPUT VALUES ARE "R", "H" or "A" - Road, Home, All');
+	end;
+	
+	procedure ROAD_TEAM_RECORD is
+			
+		cursor roadGames is
+			select distinct(roadteam.roadteam) as RoadTeam, 
+			(select count(*) from nfl_game rt where rt.roadteam = roadteam.roadteam) as TotalRoadGames,
+			(select count(*) from nfl_game rt where rt.roadteam = roadteam.roadteam and rt.rtts > rt.htts) as RoadWins,
+			(select count(*) from nfl_game rt where rt.roadteam = roadteam.roadteam and rt.rtts < rt.htts) as RoadLosses,
+			(select count(*) from nfl_game rt where rt.roadteam = roadteam.roadteam and rt.rtts = rt.htts and rt.otyn = 'Y') as RoadTies,
+			(ROUND((select count(*) from nfl_game rt where rt.roadteam = roadteam.roadteam and rt.rtts > rt.htts) / 
+			(select count(*) from nfl_game rt where rt.roadteam = roadteam.roadteam),3)) as RoadWinPct  
+			from nfl_game roadteam
+			group by roadteam.roadteam
+			order by RoadWinPct DESC, RoadTeam;
+
+	begin
+		DBMS_OUTPUT.PUT_LINE('ROAD TEAM RECORD STORED PROCEDURE');
+		
+		DBMS_OUTPUT.PUT_LINE('');
+		DBMS_OUTPUT.PUT_LINE('RoadTeam,RoadGames,RoadWins,RoadLosses,RoadOTLosses,RoadWinPct');
+		DBMS_OUTPUT.PUT_LINE('');
+		
+		for team in roadGames loop
+			DBMS_OUTPUT.PUT_LINE(team.RoadTeam || ',' || team.TotalRoadGames || ',' || team.RoadWins || ',' || team.RoadLosses || ',' || team.RoadTies || ',' || team.RoadWinPct);
+		end loop;
+			
+	end;
+	
+	procedure HOME_TEAM_RECORD is
+	
+		cursor homeGames is
+			select distinct(hometeam.hometeam) as HomeTeam, 
+			(select count(*) from nfl_game ht where ht.hometeam = hometeam.hometeam) as TotalHomeGames,
+			(select count(*) from nfl_game ht where ht.hometeam = hometeam.hometeam and ht.htts > ht.rtts) as HomeWins,
+			(select count(*) from nfl_game ht where ht.hometeam = hometeam.hometeam and ht.htts < ht.rtts) as HomeLosses,
+			(select count(*) from nfl_game ht where ht.hometeam = hometeam.hometeam and ht.htts = ht.rtts and ht.otyn = 'Y') as HomeTies,
+			(ROUND((select count(*) from nfl_game ht where ht.hometeam = hometeam.hometeam and ht.htts > ht.rtts) / 
+			(select count(*) from nfl_game ht where ht.hometeam = hometeam.hometeam),3)) as HomeWinPct  
+			from nfl_game hometeam
+			group by hometeam.hometeam
+			order by HomeWinPct DESC, HomeTeam;
+	
+	begin
+		DBMS_OUTPUT.PUT_LINE('HOME TEAM RECORD STORED PROCEDURE');
+		
+		DBMS_OUTPUT.PUT_LINE('');
+		DBMS_OUTPUT.PUT_LINE('HomeTeam,HomeGames,HomeWins,HomeLosses,HomeTies,HomeWinPct');
+		DBMS_OUTPUT.PUT_LINE('');
+		
+		for team in homeGames loop
+			DBMS_OUTPUT.PUT_LINE(team.HomeTeam || ',' || team.TotalHomeGames || ',' || team.HomeWins || ',' || team.HomeLosses || ',' || team.HomeTies || team.HomeWinPct);
+		end loop;
+			
+	end;
+	
+	procedure ALL_TEAM_RECORD is
+	
+		cursor totalGames is
+			select distinct(nflteam.hometeam) as Team,
+			(select count(*) from nfl_game t where t.hometeam = nflteam.hometeam or t.roadteam = nflteam.hometeam) as TotalGames,
+			(select count(*) from nfl_game t 
+			where (t.hometeam = nflteam.hometeam and t.htts > t.rtts) 
+			or (t.roadteam = nflteam.hometeam and t.rtts > t.htts)) as TeamWins,
+			(select count(*) from nfl_game t 
+			where (t.hometeam = nflteam.hometeam and t.htts < t.rtts) 
+			or (t.roadteam = nflteam.hometeam and t.rtts < t.htts)) as TeamLosses,
+			(select count(*) from nfl_game t 
+			where ((t.hometeam = nflteam.hometeam or t.roadteam = nflteam.hometeam )
+			and t.htts = t.rtts and t.otyn = 'Y')) as TeamTies,
+			(ROUND((select count(*) from nfl_game t where (t.hometeam = nflteam.hometeam and t.htts > t.rtts) 
+			or (t.roadteam = nflteam.hometeam and t.rtts > t.htts)) /
+			(select count(*) from nfl_game t where t.hometeam = nflteam.hometeam or t.roadteam = nflteam.hometeam),3)) as TeamWinPct
+			from nfl_game nflteam
+			group by nflteam.hometeam
+			order by TeamWinPct DESC;
+	
+	begin
+		DBMS_OUTPUT.PUT_LINE('TOTAL TEAM RECORD STORED PROCEDURE');
+		
+		DBMS_OUTPUT.PUT_LINE('');
+		DBMS_OUTPUT.PUT_LINE('Team,TotalGames,TeamWins,TeamLosses,TeamTies,TeamWinPct');
+		DBMS_OUTPUT.PUT_LINE('');
+		
+		for team in totalGames loop
+			DBMS_OUTPUT.PUT_LINE(team.Team || ',' || team.TotalGames || ',' || team.TeamWins || ',' || team.TeamLosses || ',' || team.TeamTies || ',' || team.TeamWinPct);
+		end loop;
+
+	end;
+	
+   procedure TEAM_POINTS_SCORED(inLoc in varchar2 DEFAULT 'A') is
+	
+		invalid_loc exception;
+		
+	begin
+		DBMS_OUTPUT.PUT_LINE('inLoc:' || UPPER(inLoc) || ':test');
+		
+		if (UPPER(inLoc) not in ('R','H','A')) then
+			raise invalid_loc;
+		end if;
+			
+		DBMS_OUTPUT.PUT_LINE('VALID INPUT VALUE - CHECK TEAM SCORE: ' || inLoc);
+		
+		if (UPPER(inLoc) = 'R') then
+			ROAD_TEAM_POINTS_SCORED;
+		end if;
+	
+		if (UPPER(inLoc) = 'H') then
+			HOME_TEAM_POINTS_SCORED;
+		end if;
+	
+		if (UPPER(inLoc) = 'A') then
+			ALL_TEAM_POINTS_SCORED;
+		end if;
+	
+	exception
+		when invalid_loc then
+			DBMS_OUTPUT.PUT_LINE('IN EXCEPTION - NOT VALID INPUT VALUE... EXITING STORED PROCEDURE...');
+			DBMS_OUTPUT.PUT_LINE('VALID INPUT VALUES ARE "R", "H" or "A" - Road, Home, All');
+	end;
+   
+   
+   procedure ROAD_TEAM_POINTS_SCORED is
+   
+		cursor roadGames is
+			select s.roadteam as RoadTeam, 
+			(select count(*) from nfl_game gp where s.roadteam = gp.roadteam) as RoadGamesPlayed,
+			sum(s.rtts) as RoadTotalPointsScored,
+			(ROUND((sum(s.rtts) / (select count(*) from nfl_game gp where s.roadteam = gp.roadteam)),2)) as RoadAvgPointsScored,
+			sum(s.htts) as RoadTotalPointsAllowed,
+			(ROUND((sum(s.htts) / (select count(*) from nfl_game gp where s.roadteam = gp.roadteam)),2)) as RoadAvgPointsAllowed, 
+			(sum(s.rtts) - sum(s.htts)) as RoadPtsDiff
+			from nfl_game s 
+			group by s.roadteam 
+			order by RoadAvgPointsScored desc, RoadPtsDiff DESC;
+
+   begin
+		DBMS_OUTPUT.PUT_LINE('ROAD TEAM POINTS SCORED STORED PROCEDURE');
+		
+		DBMS_OUTPUT.PUT_LINE('');
+		DBMS_OUTPUT.PUT_LINE('RoadTeam,RoadGamesPlayed,RoadTotalPointsScored,RoadAvgPointsScored,RoadTotalPointsAllowed,RoadAvgPointsAllowed,RoadPtsDiff');
+		DBMS_OUTPUT.PUT_LINE('');
+		
+		for team in roadGames loop
+			DBMS_OUTPUT.PUT_LINE(team.RoadTeam || ',' || team.RoadGamesPlayed || ',' || team.RoadTotalPointsScored || ',' || team.RoadAvgPointsScored || ',' 
+			|| team.RoadTotalPointsAllowed || ',' || team.RoadAvgPointsAllowed  || ',' || team.RoadPtsDiff);
+		end loop;
+			
+   end;
+   
+   
+   procedure HOME_TEAM_POINTS_SCORED is
+   
+		cursor homeGames is
+			select s.hometeam as HomeTeam, 
+			(select count(*) from nfl_game gp where s.hometeam = gp.hometeam) as HomeGamesPlayed,
+			sum(s.htts) as HomeTotalPointsScored,
+			(ROUND((sum(s.htts) / (select count(*) from nfl_game gp where s.hometeam = gp.hometeam)),2)) as HomeAvgPointsScored,
+			sum(s.rtts) as HomeTotalPointsAllowed,
+			(ROUND((sum(s.rtts) / (select count(*) from nfl_game gp where s.hometeam = gp.hometeam)),2)) as HomeAvgPointsAllowed, 
+			(sum(s.htts) - sum(s.rtts)) as HomePointsScoredMinusAllowed
+			from nfl_game s 
+			group by s.hometeam 
+			order by HomeAvgPointsScored desc, HomePointsScoredMinusAllowed DESC;
+			
+   begin
+		DBMS_OUTPUT.PUT_LINE('HOME TEAM POINTS SCORED STORED PROCEDURE');
+		
+		DBMS_OUTPUT.PUT_LINE('');
+		DBMS_OUTPUT.PUT_LINE('HomeTeam,HomeGamesPlayed,HomeTotalPointsScored,HomeAvgPointsScored,HomeTotalPointsAllowed,HomeAvgPointsAllowed,HomePointsScoredMinusAllowed');
+		DBMS_OUTPUT.PUT_LINE('');
+		
+		for team in homeGames loop
+			DBMS_OUTPUT.PUT_LINE(team.HomeTeam || ',' || team.HomeGamesPlayed || ',' || team.HomeTotalPointsScored || ',' || team.HomeAvgPointsScored || ',' || 
+			team.HomeTotalPointsAllowed || ',' || team.HomeAvgPointsAllowed || ',' || team.HomePointsScoredMinusAllowed);
+		end loop;
+			
+   end;
+   
+   
+   procedure ALL_TEAM_POINTS_SCORED is
+   
+		cursor teamGames is
+			select s.hometeam as Team, 
+			(select count(*) from nfl_game gp where s.hometeam = gp.roadteam or s.hometeam = gp.hometeam) as GamesPlayed,
+			((select sum(agp.rtts) from nfl_game agp where s.hometeam = agp.roadteam)
+				+ (select sum(hgp.htts) from nfl_game hgp where s.hometeam = hgp.hometeam)) as TotalPointsScored,
+			(ROUND(
+			( ((select sum(agp.rtts) from nfl_game agp where s.hometeam = agp.roadteam) 
+				+ (select sum(hgp.htts) from nfl_game hgp where s.hometeam = hgp.hometeam)) 
+				/ (select count(*) from nfl_game gp where s.hometeam = gp.roadteam or s.hometeam = gp.hometeam)),2)) as AvgPointsScored,
+			((select sum(agp.rtts) from nfl_game agp where s.hometeam = agp.roadteam)
+				+ (select sum(hgp.rtts) from nfl_game hgp where s.hometeam = hgp.hometeam)) as TotalPointsAllowed,
+			(ROUND(( 
+				((select sum(agp.htts) from nfl_game agp where s.hometeam = agp.roadteam) 
+				+ (select sum(hgp.rtts) from nfl_game hgp where s.hometeam = hgp.hometeam)) 
+				/ (select count(*) from nfl_game gp where s.hometeam = gp.roadteam or s.hometeam = gp.hometeam)),2)) as AvgPointsAllowed, 
+			((select sum(gp.htts) from nfl_game gp where s.hometeam = gp.hometeam)
+				- (select sum(gp.rtts) from nfl_game gp where s.hometeam = gp.hometeam) 
+				+ (select sum(gp.rtts) from nfl_game gp where s.hometeam = gp.roadteam)
+				- (select sum(gp.htts) from nfl_game gp where s.hometeam = gp.roadteam)
+			) as PointsScoredMinusAllowed
+			from nfl_game s 
+			group by s.hometeam 
+			order by AvgPointsScored desc, PointsScoredMinusAllowed DESC;  
+		
+   begin
+		DBMS_OUTPUT.PUT_LINE('TOTAL TEAM POINTS SCORED STORED PROCEDURE');
+		
+		DBMS_OUTPUT.PUT_LINE('');
+		DBMS_OUTPUT.PUT_LINE('Team,GamesPlayed,TotalPointsScored,AvgPointsScored,TotalPointsAllowed,AvgPointsAllowed');
+		DBMS_OUTPUT.PUT_LINE('');
+		
+		for team in teamGames loop
+			DBMS_OUTPUT.PUT_LINE(team.Team || ',' || team.GamesPlayed || ',' || team.TotalPointsScored || ',' || team.AvgPointsScored || ',' || team.TotalPointsAllowed || ',' || team.AvgPointsAllowed);
+		end loop;
+			
+		
+   end;
+   
+   procedure TEAM_POINTS_ALLOWED(inLoc in varchar2 DEFAULT 'A') is
+	
+		invalid_loc exception;
+		
+	begin
+		DBMS_OUTPUT.PUT_LINE('inLoc:' || UPPER(inLoc) || ':test');
+		
+		if (UPPER(inLoc) not in ('R','H','A')) then
+			raise invalid_loc;
+		end if;
+			
+		DBMS_OUTPUT.PUT_LINE('VALID INPUT VALUE - CHECK TEAM POINTS ALLOWED: ' || inLoc);
+		
+		if (UPPER(inLoc) = 'R') then
+			ROAD_TEAM_POINTS_ALLOWED;
+		end if;
+	
+		if (UPPER(inLoc) = 'H') then
+			HOME_TEAM_POINTS_ALLOWED;
+		end if;
+	
+		if (UPPER(inLoc) = 'A') then
+			ALL_TEAM_POINTS_ALLOWED;
+		end if;
+	
+	exception
+		when invalid_loc then
+			DBMS_OUTPUT.PUT_LINE('IN EXCEPTION - NOT VALID INPUT VALUE... EXITING STORED PROCEDURE...');
+			DBMS_OUTPUT.PUT_LINE('VALID INPUT VALUES ARE "R", "H" or "A" - Road, Home, All');
+	end;
+   
+   
+   procedure ROAD_TEAM_POINTS_ALLOWED is
+   
+		cursor roadGames is
+			select s.roadteam as RoadTeam, 
+			(select count(*) from nfl_game gp where s.roadteam = gp.roadteam) as RoadGamesPlayed,
+			sum(s.rtts) as RoadTotalPointsScored,
+			(ROUND((sum(s.rtts) / (select count(*) from nfl_game gp where s.roadteam = gp.roadteam)),2)) as RoadAvgPointsScored,
+			sum(s.htts) as RoadTotalPointsAllowed,
+			(ROUND((sum(s.htts) / (select count(*) from nfl_game gp where s.roadteam = gp.roadteam)),2)) as RoadAvgPointsAllowed, 
+			(sum(s.rtts) - sum(s.htts)) as RoadPointsScoredMinusAllowed
+			from nfl_game s 
+			group by s.roadteam 
+			order by RoadAvgPointsAllowed desc, RoadPointsScoredMinusAllowed DESC;
+
+   begin
+		DBMS_OUTPUT.PUT_LINE('ROAD TEAM POINTS ALLOWED STORED PROCEDURE');
+		
+		DBMS_OUTPUT.PUT_LINE('');
+		DBMS_OUTPUT.PUT_LINE('RoadTeam,RoadGamesPlayed,RoadTotalPointsScored,RoadAvgPointsScored,RoadTotalPointsAllowed,RoadAvgPointsAllowed,RoadPointsScoredMinusAllowed');
+		DBMS_OUTPUT.PUT_LINE('');
+		
+		for team in roadGames loop
+			DBMS_OUTPUT.PUT_LINE(team.RoadTeam || ',' || team.RoadGamesPlayed || ',' || team.RoadTotalPointsScored || ',' || team.RoadAvgPointsScored || ',' 
+			|| team.RoadTotalPointsAllowed || ',' || team.RoadAvgPointsAllowed  || ',' || team.RoadPointsScoredMinusAllowed);
+		end loop;
+			
+   end;
+   
+   
+   procedure HOME_TEAM_POINTS_ALLOWED is
+   
+		cursor homeGames is
+			select s.hometeam as HomeTeam, 
+			(select count(*) from nfl_game gp where s.hometeam = gp.hometeam) as HomeGamesPlayed,
+			sum(s.htts) as HomeTotalPointsScored,
+			(ROUND((sum(s.htts) / (select count(*) from nfl_game gp where s.hometeam = gp.hometeam)),2)) as HomeAvgPointsScored,
+			sum(s.rtts) as HomeTotalPointsAllowed,
+			(ROUND((sum(s.rtts) / (select count(*) from nfl_game gp where s.hometeam = gp.hometeam)),2)) as HomeAvgPointsAllowed, 
+			(sum(s.htts) - sum(s.rtts)) as HomePointsScoredMinusAllowed
+			from nfl_game s 
+			group by s.hometeam 
+			order by HomeAvgPointsAllowed desc, HomePointsScoredMinusAllowed DESC;
+			
+   begin
+		DBMS_OUTPUT.PUT_LINE('HOME TEAM POINTS ALLOWED STORED PROCEDURE');
+		
+		DBMS_OUTPUT.PUT_LINE('');
+		DBMS_OUTPUT.PUT_LINE('HomeTeam,HomeGamesPlayed,HomeTotalPointsScored,HomeAvgPointsScored,HomeTotalPointsAllowed,HomeAvgPointsAllowed,HomePointsScoredMinusAllowed');
+		DBMS_OUTPUT.PUT_LINE('');
+		
+		for team in homeGames loop
+			DBMS_OUTPUT.PUT_LINE(team.HomeTeam || ',' || team.HomeGamesPlayed || ',' || team.HomeTotalPointsScored || ',' || team.HomeAvgPointsScored || ',' || 
+			team.HomeTotalPointsAllowed || ',' || team.HomeAvgPointsAllowed || ',' || team.HomePointsScoredMinusAllowed);
+		end loop;
+			
+   end;
+   
+   
+   procedure ALL_TEAM_POINTS_ALLOWED is
+   
+		cursor teamGames is
+			select s.hometeam as Team, 
+			(select count(*) from nfl_game gp where s.hometeam = gp.roadteam or s.hometeam = gp.hometeam) as GamesPlayed,
+			((select sum(agp.rtts) from nfl_game agp where s.hometeam = agp.roadteam)
+				+ (select sum(hgp.htts) from nfl_game hgp where s.hometeam = hgp.hometeam)) as TotalPointsScored,
+			(ROUND(
+			( ((select sum(agp.rtts) from nfl_game agp where s.hometeam = agp.roadteam) 
+				+ (select sum(hgp.htts) from nfl_game hgp where s.hometeam = hgp.hometeam)) 
+				/ (select count(*) from nfl_game gp where s.hometeam = gp.roadteam or s.hometeam = gp.hometeam)),2)) as AvgPointsScored,
+			((select sum(agp.rtts) from nfl_game agp where s.hometeam = agp.roadteam)
+				+ (select sum(hgp.rtts) from nfl_game hgp where s.hometeam = hgp.hometeam)) as TotalPointsAllowed,
+			(ROUND(( 
+				((select sum(agp.htts) from nfl_game agp where s.hometeam = agp.roadteam) 
+				+ (select sum(hgp.rtts) from nfl_game hgp where s.hometeam = hgp.hometeam)) 
+				/ (select count(*) from nfl_game gp where s.hometeam = gp.roadteam or s.hometeam = gp.hometeam)),2)) as AvgPointsAllowed, 
+			((select sum(gp.htts) from nfl_game gp where s.hometeam = gp.hometeam)
+				- (select sum(gp.rtts) from nfl_game gp where s.hometeam = gp.hometeam) 
+				+ (select sum(gp.rtts) from nfl_game gp where s.hometeam = gp.roadteam)
+				- (select sum(gp.htts) from nfl_game gp where s.hometeam = gp.roadteam)
+			) as PointsScoredMinusAllowed
+			from nfl_game s 
+			group by s.hometeam 
+			order by AvgPointsAllowed desc, PointsScoredMinusAllowed DESC;  
+		
+   begin
+		DBMS_OUTPUT.PUT_LINE('TOTAL TEAM POINTS ALLOWED STORED PROCEDURE');
+		
+		DBMS_OUTPUT.PUT_LINE('');
+		DBMS_OUTPUT.PUT_LINE('Team,GamesPlayed,TotalPointsScored,AvgPointsScored,TotalPointsAllowed,AvgPointsAllowed');
+		DBMS_OUTPUT.PUT_LINE('');
+		
+		for team in teamGames loop
+			DBMS_OUTPUT.PUT_LINE(team.Team || ',' || team.GamesPlayed || ',' || team.TotalPointsScored || ',' || team.AvgPointsScored || ',' || team.TotalPointsAllowed || ',' || team.AvgPointsAllowed);
+		end loop;
+			
+		
+   end;
+   
+   procedure TEAM_BEST_TO_RATIO(inLoc in varchar2 DEFAULT 'A') is
+	
+		invalid_loc exception;
+		
+	begin
+		DBMS_OUTPUT.PUT_LINE('inLoc:' || UPPER(inLoc) || ':test');
+		
+		if (UPPER(inLoc) not in ('R','H','A')) then
+			raise invalid_loc;
+		end if;
+			
+		DBMS_OUTPUT.PUT_LINE('VALID INPUT VALUE - CHECK TEAM POINTS ALLOWED: ' || inLoc);
+		
+		if (UPPER(inLoc) = 'R') then
+			ROAD_TEAM_BEST_TO_RATIO;
+		end if;
+	
+		if (UPPER(inLoc) = 'H') then
+			HOME_TEAM_BEST_TO_RATIO;
+		end if;
+	
+		if (UPPER(inLoc) = 'A') then
+			ALL_TEAM_BEST_TO_RATIO;
+		end if;
+	
+	exception
+		when invalid_loc then
+			DBMS_OUTPUT.PUT_LINE('IN EXCEPTION - NOT VALID INPUT VALUE... EXITING STORED PROCEDURE...');
+			DBMS_OUTPUT.PUT_LINE('VALID INPUT VALUES ARE "R", "H" or "A" - Road, Home, All');
+	end;
+   
+   
+   procedure ROAD_TEAM_BEST_TO_RATIO is
+   
+		cursor roadGames is
+			select s.roadteam as RoadTeam, 
+			(select count(*) from nfl_game gp where s.roadteam = gp.roadteam) as RoadGamesPlayed,
+			sum(s.htto) as RoadTotalForcedTurnovers,
+			(ROUND((sum(s.htto) / (select count(*) from nfl_game gp where s.roadteam = gp.roadteam)),2)) as RoadAvgForcedTOPerGame,
+			sum(s.rtto) as RoadTotalLostTurnovers,
+			(ROUND((sum(s.rtto) / (select count(*) from nfl_game gp where s.roadteam = gp.roadteam)),2)) as RoadAvgLostTOPerGame, 
+			(sum(s.htto) - sum(s.rtto)) as RoadTODiff
+			from nfl_game s 
+			group by s.roadteam 
+			order by RoadTODiff desc, RoadAvgForcedTOPerGame DESC;
+
+   begin
+		DBMS_OUTPUT.PUT_LINE('ROAD TEAM TURNOVERS STORED PROCEDURE');
+		
+		DBMS_OUTPUT.PUT_LINE('');
+		DBMS_OUTPUT.PUT_LINE('RoadTeam,RoadGamesPlayed,RoadTotalForcedTurnovers,RoadAvgForcedTOPerGame,RoadTotalLostTurnovers,RoadAvgLostTOPerGame,RoadTODiff');
+		DBMS_OUTPUT.PUT_LINE('');
+		
+		for team in roadGames loop
+			DBMS_OUTPUT.PUT_LINE(team.RoadTeam || ',' || team.RoadGamesPlayed || ',' || team.RoadTotalForcedTurnovers || ',' || team.RoadAvgForcedTOPerGame || ',' 
+			|| team.RoadTotalLostTurnovers || ',' || team.RoadAvgLostTOPerGame  || ',' || team.RoadTODiff);
+		end loop;
+			
+   end;
+   
+   
+   procedure HOME_TEAM_BEST_TO_RATIO is
+   
+		cursor homeGames is
+			select s.hometeam as HomeTeam, 
+			(select count(*) from nfl_game gp where s.hometeam = gp.hometeam) as HomeGamesPlayed,
+			sum(s.rtto) as HomeTotalForcedTurnovers,
+			(ROUND((sum(s.rtto) / (select count(*) from nfl_game gp where s.hometeam = gp.hometeam)),2)) as HomeAvgForcedTOPerGame,
+			sum(s.htto) as HomeTotalLostTurnovers,
+			(ROUND((sum(s.htto) / (select count(*) from nfl_game gp where s.hometeam = gp.hometeam)),2)) as HomeAvgLostTOPerGame, 
+			(sum(s.rtto) - sum(s.htto)) as HomeTODiff
+			from nfl_game s 
+			group by s.hometeam 
+			order by HomeTODiff desc, HomeAvgForcedTOPerGame DESC;
+
+   begin
+		DBMS_OUTPUT.PUT_LINE('HOME TEAM TURNOVERS STORED PROCEDURE');
+		
+		DBMS_OUTPUT.PUT_LINE('');
+		DBMS_OUTPUT.PUT_LINE('HomeTeam,HomeGamesPlayed,HomeTotalForcedTurnovers,HomeAvgForcedTOPerGame,HomeTotalLostTurnovers,HomeAvgLostTOPerGame,HomeTODiff');
+		DBMS_OUTPUT.PUT_LINE('');
+		
+		for team in homeGames loop
+			DBMS_OUTPUT.PUT_LINE(team.HomeTeam || ',' || team.HomeGamesPlayed || ',' || team.HomeTotalForcedTurnovers || ',' || team.HomeAvgForcedTOPerGame || ',' 
+			|| team.HomeTotalLostTurnovers || ',' || team.HomeAvgLostTOPerGame  || ',' || team.HomeTODiff);
+		end loop;
+			
+   end;
+   
+   
+   procedure ALL_TEAM_BEST_TO_RATIO is
+   
+		cursor teamGames is
+			select s.hometeam as Team, 
+			(select count(*) from nfl_game gp where s.hometeam = gp.roadteam or s.hometeam = gp.hometeam) as GamesPlayed,
+			((select sum(agto.htto) from nfl_game agto where s.hometeam = agto.roadteam)
+				+ (select sum(hgto.rtto) from nfl_game hgto where s.hometeam = hgto.hometeam)) as TotalForcedTO,
+			(ROUND(
+			( ((select sum(agto.htto) from nfl_game agto where s.hometeam = agto.roadteam) 
+				+ (select sum(hgto.rtto) from nfl_game hgto where s.hometeam = hgto.hometeam)) 
+				/ (select count(*) from nfl_game gp where s.hometeam = gp.roadteam or s.hometeam = gp.hometeam)),2)) as AvgForcedTOPerGame,
+			((select sum(agto.rtto) from nfl_game agto where s.hometeam = agto.roadteam)
+				+ (select sum(hgto.htto) from nfl_game hgto where s.hometeam = hgto.hometeam)) as TotalLostTurnovers,
+			(ROUND(( 
+				((select sum(agto.rtto) from nfl_game agto where s.hometeam = agto.roadteam) 
+				+ (select sum(hgto.htto) from nfl_game hgto where s.hometeam = hgto.hometeam)) 
+				/ (select count(*) from nfl_game gp where s.hometeam = gp.roadteam or s.hometeam = gp.hometeam)),2)) as AvgLostTOPerGame, 
+			((select sum(gp.rtto) from nfl_game gp where s.hometeam = gp.hometeam)
+				+ (select sum(gp.htto) from nfl_game gp where s.hometeam = gp.roadteam)
+				- (select sum(gp.htto) from nfl_game gp where s.hometeam = gp.hometeam) 
+				- (select sum(gp.rtto) from nfl_game gp where s.hometeam = gp.roadteam)
+			) as TeamSeasonTODiff
+			from nfl_game s 
+			group by s.hometeam 
+			order by TeamSeasonTODiff DESC, AvgLostTOPerGame desc;  
+		
+   begin
+		DBMS_OUTPUT.PUT_LINE('TOTAL TEAM POINTS ALLOWED STORED PROCEDURE');
+		
+		DBMS_OUTPUT.PUT_LINE('');
+		DBMS_OUTPUT.PUT_LINE('Team,GamesPlayed,TotalForcedTO,AvgForcedTOPerGame,TotalLostTurnovers,AvgLostTOPerGame,TeamSeasonTODiff');
+		DBMS_OUTPUT.PUT_LINE('');
+		
+		for team in teamGames loop
+			DBMS_OUTPUT.PUT_LINE(team.Team || ',' || team.GamesPlayed || ',' || team.TotalForcedTO || ',' || team.AvgForcedTOPerGame || ',' || team.TotalLostTurnovers 
+				|| ',' || team.AvgLostTOPerGame || ',' || team.TeamSeasonTODiff);
+		end loop;
+			
+		
+   end;
+   
+	procedure TEAM_RECORD_AFTER_Q1(inLoc in varchar2 DEFAULT 'A') is
+
+		invalid_loc exception;
+		
+	begin
+		DBMS_OUTPUT.PUT_LINE('inLoc:' || UPPER(inLoc) || ':test');
+		
+		if (UPPER(inLoc) not in ('A','B','T')) then
+			raise invalid_loc;
+		end if;
+			
+		DBMS_OUTPUT.PUT_LINE('VALID INPUT VALUE - TEAM RECORD WITH SCORE AFTER FIRST QUARTER: ' || inLoc);
+		
+		if (UPPER(inLoc) = 'A') then
+			TEAM_RECORD_AFTER_Q1_AHEAD;
+		end if;
+
+		if (UPPER(inLoc) = 'B') then
+			TEAM_RECORD_AFTER_Q1_BEHIND;
+		end if;
+
+		if (UPPER(inLoc) = 'T') then
+			TEAM_RECORD_AFTER_Q1_TIED;
+		end if;
+
+	exception
+		when invalid_loc then
+			DBMS_OUTPUT.PUT_LINE('IN EXCEPTION - NOT VALID INPUT VALUE... EXITING STORED PROCEDURE...');
+			DBMS_OUTPUT.PUT_LINE('VALID INPUT VALUES ARE "A", "B" or "T" - Ahead, Behind and Tied');
+	end;
+
+	procedure TEAM_RECORD_AFTER_Q1_AHEAD is
+
+		cursor afterQ1Ahead is
+			select ng.hometeam as team, (select count(*) from nfl_game g where 
+			(g.hometeam = ng.hometeam and g.rtq1 < g.htq1) or (g.roadteam = ng.hometeam and g.rtq1 > g.htq1)) as totalgamesahead,
+			(select count(*) from nfl_game g where ((g.hometeam = ng.hometeam and g.rtq1 < g.htq1 and g.rtts < g.htts) or (g.roadteam = ng.hometeam and g.rtq1 > g.htq1 and g.rtts > g.htts))) as gameswon,
+			(select count(*) from nfl_game g where ((g.hometeam = ng.hometeam and g.rtq1 < g.htq1 and g.rtts > g.htts) or (g.roadteam = ng.hometeam and g.rtq1 > g.htq1 and g.rtts < g.htts))) as gameslost,
+			(select count(*) from nfl_game g where ((g.hometeam = ng.hometeam and g.rtq1 < g.htq1 and g.rtts = g.htts) or (g.roadteam = ng.hometeam and g.rtq1 > g.htq1 and g.rtts = g.htts))) as gamestied,
+			(case when ((select count(*) from nfl_game g where (g.hometeam = ng.hometeam and g.rtq1 < g.htq1) or (g.roadteam = ng.hometeam and g.rtq1 > g.htq1)) = 0) then 0 else
+			round(((select count(*) from nfl_game g where (g.hometeam = ng.hometeam and g.rtq1 < g.htq1 and g.rtts < g.htts) or (g.roadteam = ng.hometeam and g.rtq1 > g.htq1 and g.rtts > g.htts)) 
+			/ (select count(*) from nfl_game g where (g.hometeam = ng.hometeam and g.rtq1 < g.htq1) or (g.roadteam = ng.hometeam and g.rtq1 > g.htq1))),2) end) as winpct
+			from  nfl_game ng
+			group by ng.HOMETEAM
+			order by winpct DESC, totalgamesahead DESC;
+
+	begin
+		DBMS_OUTPUT.PUT_LINE('TEAM AHEAD AFTER FIRST QUARTER STORED PROCEDURE');
+		
+		DBMS_OUTPUT.PUT_LINE('');
+		DBMS_OUTPUT.PUT_LINE('Team,GamesAhead,GamesWon,GamesLost,GamesTied,WinPct');
+		DBMS_OUTPUT.PUT_LINE('');
+		
+		for team in afterQ1Ahead loop
+			DBMS_OUTPUT.PUT_LINE(team.team || ',' || team.totalgamesahead || ',' || team.gameswon || ',' || team.gameslost || ',' 
+			|| team.gamestied || ',' || team.winpct);
+		end loop;
+			
+	end;
+
+	procedure TEAM_RECORD_AFTER_Q1_BEHIND is
+
+		cursor afterQ1Behind is
+			select ng.hometeam as team, (select count(*) from nfl_game g where 
+			(g.hometeam = ng.hometeam and g.rtq1 > g.htq1) or (g.roadteam = ng.hometeam and g.rtq1 < g.htq1)) as totalgamesbehind,
+			(select count(*) from nfl_game g where ((g.hometeam = ng.hometeam and g.rtq1 > g.htq1 and g.rtts < g.htts) or (g.roadteam = ng.hometeam and g.rtq1 < g.htq1 and g.rtts > g.htts))) as gameswon,
+			(select count(*) from nfl_game g where ((g.hometeam = ng.hometeam and g.rtq1 > g.htq1 and g.rtts > g.htts) or (g.roadteam = ng.hometeam and g.rtq1 < g.htq1 and g.rtts < g.htts))) as gameslost,
+			(select count(*) from nfl_game g where ((g.hometeam = ng.hometeam and g.rtq1 > g.htq1 and g.rtts = g.htts) or (g.roadteam = ng.hometeam and g.rtq1 < g.htq1 and g.rtts = g.htts))) as gamestied,
+			(case when ((select count(*) from nfl_game g where (g.hometeam = ng.hometeam and g.rtq1 > g.htq1) or (g.roadteam = ng.hometeam and g.rtq1 < g.htq1)) = 0) then 0 else
+			round(((select count(*) from nfl_game g where (g.hometeam = ng.hometeam and g.rtq1 > g.htq1 and g.rtts < g.htts) or (g.roadteam = ng.hometeam and g.rtq1 < g.htq1 and g.rtts > g.htts)) 
+			/ (select count(*) from nfl_game g where (g.hometeam = ng.hometeam and g.rtq1 > g.htq1) or (g.roadteam = ng.hometeam and g.rtq1 < g.htq1))),2) end) as winpct
+			from  nfl_game ng
+			group by ng.HOMETEAM
+			order by winpct DESC, totalgamesbehind DESC;
+
+	begin
+		DBMS_OUTPUT.PUT_LINE('TEAM AHEAD AFTER FIRST QUARTER STORED PROCEDURE');
+		
+		DBMS_OUTPUT.PUT_LINE('');
+		DBMS_OUTPUT.PUT_LINE('Team,GamesAhead,GamesWon,GamesLost,GamesTied,WinPct');
+		DBMS_OUTPUT.PUT_LINE('');
+		
+		for team in afterQ1Behind loop
+			DBMS_OUTPUT.PUT_LINE(team.team || ',' || team.totalgamesbehind || ',' || team.gameswon || ',' || team.gameslost || ',' 
+			|| team.gamestied || ',' || team.winpct);
+		end loop;
+			
+	end;
+	
+	procedure TEAM_RECORD_AFTER_Q1_TIED is
+
+		cursor afterQ1Tied is
+			select ng.hometeam as team, (select count(*) from nfl_game g where (g.hometeam = ng.hometeam or g.roadteam = ng.hometeam) and g.rtq1 = g.htq1) as totalgamestied,
+			(select count(*) from nfl_game g where ((g.hometeam = ng.hometeam and g.rtts < g.htts) or (g.roadteam = ng.hometeam and g.rtts > g.htts)) and g.rtq1 = g.htq1) as gameswon,
+			(select count(*) from nfl_game g where ((g.hometeam = ng.hometeam and g.rtts > g.htts) or (g.roadteam = ng.hometeam and g.rtts < g.htts)) and g.rtq1 = g.htq1) as gameslost,
+			(select count(*) from nfl_game g where ((g.hometeam = ng.hometeam and g.rtts = g.htts) or (g.roadteam = ng.hometeam and g.rtts = g.htts)) and g.rtq1 = g.htq1) as gamestied,
+			(case when ((select count(*) from nfl_game g where (g.hometeam = ng.hometeam or g.roadteam = ng.hometeam) and g.rtq1 = g.htq1) = 0) then 0 else
+			round(((select count(*) from nfl_game g where (((g.hometeam = ng.hometeam and g.rtts < g.htts) or (g.roadteam = ng.hometeam and g.rtts > g.htts)) and g.rtq1 = g.htq1)) 
+			/ (select count(*) from nfl_game g where (g.hometeam = ng.hometeam or g.roadteam = ng.hometeam) and g.rtq1 = g.htq1)),2) end) as winpct
+			from  nfl_game ng
+			group by ng.HOMETEAM
+			order by winpct DESC, totalgamestied DESC;
+
+	begin
+		DBMS_OUTPUT.PUT_LINE('TEAM AHEAD AFTER FIRST QUARTER STORED PROCEDURE');
+		
+		DBMS_OUTPUT.PUT_LINE('');
+		DBMS_OUTPUT.PUT_LINE('Team,GamesAhead,GamesWon,GamesLost,GamesTied,WinPct');
+		DBMS_OUTPUT.PUT_LINE('');
+		
+		for team in afterQ1Tied loop
+			DBMS_OUTPUT.PUT_LINE(team.team || ',' || team.totalgamestied || ',' || team.gameswon || ',' || team.gameslost || ',' 
+			|| team.gamestied || ',' || team.winpct);
+		end loop;
+			
+	end;
+	
+   
+END NFLGAMES;
+
+/
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

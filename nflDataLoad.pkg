@@ -1,0 +1,141 @@
+create or replace
+PACKAGE BODY NFLDATALOAD AS
+
+	procedure NFL_GAME_DATA_LOAD is
+		-- Using Oracle MERGE INTO to load data 
+		--   This avoids duplicate records from staging table to be loaded into application transaction/reporting table
+		
+		data_error_flag CHAR DEFAULT 'N';
+		data_error_msg VARCHAR2(100);
+		game_data_error_input VARCHAR2(150);
+		
+		cursor stgGame is
+			select * from NFL_GAME_STAGE;
+		
+	begin
+		DBMS_OUTPUT.PUT_LINE('NFL_GAME_DATA_LOAD STORED PROCEDURE');
+		
+		DBMS_OUTPUT.PUT_LINE('');
+		DBMS_OUTPUT.PUT_LINE('RoadTeam,RoadGames,RoadWins,RoadLosses,RoadOTLosses,RoadPoints,RoadWinPct');
+		DBMS_OUTPUT.PUT_LINE('');
+		
+		for game in stgGame loop
+			data_error_flag := 'N';
+			data_error_msg := '';
+			
+			-- CHECK ROAD TEAM'S SCORE
+			if (game.RTTS <> (game.RTQ1 + game.RTQ2 + game.RTQ3 + game.RTQ4 + game.RTQOT)) then
+				data_error_flag := 'Y';
+				data_error_msg := 'RoadTeam Total Score is wrong';
+			end if;
+			
+			-- CHECK HOME TEAM'S SCORE
+			if (game.HTTS <> (game.HTQ1 + game.HTQ2 + game.HTQ3 + game.HTQ4 + game.HTQOT)) then
+				data_error_flag := 'Y';
+				data_error_msg := 'HomeTeam Total Score is wrong';
+			end if;
+			
+			-- CHECK ROAD TEAM'S TOTAL YARDS
+			if (game.RTTYRDS <> (game.RTRYRDS + game.RTPYRDS)) then
+				data_error_flag := 'Y';
+				data_error_msg := 'RoadTeam Total Yards are wrong';
+			end if;
+
+			-- CHECK HOME TEAM'S TOTAL YARDS
+			if (game.HTTYRDS <> (game.HTRYRDS + game.HTPYRDS)) then
+				data_error_flag := 'Y';
+				data_error_msg := 'HomeTeam Total Yards are wrong';
+			end if;
+			
+			-- CHECK GAME OVERTIME FLAG
+			if ((game.OTYN = 'N') AND ((game.RTQOT + game.HTQOT) > 0)) then
+				data_error_flag := 'Y';
+				data_error_msg := 'Game Overtime flag is N, but team has overtime score';
+			end if;
+			
+			if (data_error_flag = 'N') then
+			
+				merge into nfl_game g
+				using (select * from nfl_game_stage nflgs where game.NFLWEEK = nflgs.NFLWEEK AND game.gameDate = nflgs.gameDate AND game.ROADTEAM = nflgs.ROADTEAM AND game.HOMETEAM = nflgs.HOMETEAM) gs
+				on (g.NFLWEEK = gs.NFLWEEK AND g.ROADTEAM = gs.ROADTEAM AND g.HOMETEAM = gs.HOMETEAM)
+				WHEN MATCHED THEN UPDATE SET 
+					g.OTYN = gs.OTYN, g.RTTS = gs.RTTS, g.RTQ1 = gs.RTQ1, g.RTQ2 = gs.RTQ2, g.RTQ3 = gs.RTQ3, g.RTQ4 = gs.RTQ4,
+					g.RTQOT = gs.RTQOT, g.RTFD = gs.RTFD, g.RT3DCONV = gs.RT3DCONV, g.RT3DATT = gs.RT3DATT, g.RT4DCONV = gs.RT4DCONV,
+					g.RT4DATT = gs.RT4DATT, g.RTTYRDS = gs.RTTYRDS, g.RTRYRDS = gs.RTRYRDS, g.RTPYRDS = gs.RTPYRDS, g.RTTO = gs.RTTO,
+					g.RTSACKS = gs.RTSACKS, g.RTPEN = gs.RTPEN, g.RTPENYRDS = gs.RTPENYRDS, g.HTTS = gs.HTTS, g.HTQ1 = gs.HTQ1,
+					g.HTQ2 = gs.HTQ2, g.HTQ3 = gs.HTQ3, g.HTQ4 = gs.HTQ4, g.HTQOT = gs.HTQOT, g.HTFD = gs.HTFD, g.HT3DCONV = gs.HT3DCONV,
+					g.HT3DATT = gs.HT3DATT, g.HT4DCONV = gs.HT4DCONV, g.HT4DATT = gs.HT4DATT, g.HTTYRDS = gs.HTTYRDS, g.HTRYRDS = gs.HTRYRDS,
+					g.HTPYRDS = gs.HTPYRDS, g.HTTO = gs.HTTO, g.HTSACKS = gs.HTSACKS, g.HTPEN = gs.HTPEN, g.HTPENYRDS = gs.HTPENYRDS
+				WHEN NOT MATCHED THEN INSERT VALUES (
+					gs.NFLWEEK,to_date(gs.gameDate,'yyyy-mm-dd'),gs.OTYN,gs.ROADTEAM,gs.RTTS,gs.RTQ1,gs.RTQ2,gs.RTQ3,gs.RTQ4,gs.RTQOT,
+					gs.RTFD,gs.RT3DCONV,gs.RT3DATT,gs.RT4DCONV,gs.RT4DATT,gs.RTTYRDS,gs.RTRYRDS,gs.RTPYRDS,gs.RTTO,gs.RTSACKS,
+					gs.RTPEN,gs.RTPENYRDS,gs.HOMETEAM,gs.HTTS,gs.HTQ1,gs.HTQ2,gs.HTQ3,gs.HTQ4,gs.HTQOT,gs.HTFD,gs.HT3DCONV,
+					gs.HT3DATT,gs.HT4DCONV,gs.HT4DATT,gs.HTTYRDS,gs.HTRYRDS,gs.HTPYRDS,gs.HTTO,gs.HTSACKS,gs.HTPEN,gs.HTPENYRDS
+				);
+			
+			else 
+				
+				game_data_error_input := game.gameDate || ',' || game.OTYN || ',' || game.ROADTEAM || ',' || game.RTTS || ',' || 
+					game.RTQ1 || ',' || game.RTQ2 || ',' || game.RTQ3 || ',' || game.RTQ4 || ',' || game.RTQOT || ',' || 
+					game.RTFD || ',' || game.RT3DCONV || ',' || game.RT3DATT || ',' || game.RT4DCONV || ',' || game.RT4DATT || ',' || game.RTTYRDS || ',' || 
+					game.RTRYRDS || ',' || game.RTPYRDS || ',' || game.RTTO || ',' || game.RTSACKS || ',' || game.RTPEN || ',' || game.RTPENYRDS || ',' || 
+					game.HOMETEAM || ',' || game.HTTS || ',' || game.HTQ1 || ',' || game.HTQ2 || ',' || game.HTQ3 || ',' || game.HTQ4 || ',' || 
+					game.HTQOT || ',' || game.HTFD || ',' || game.HT3DCONV || ',' || game.HT3DATT || ',' || game.HT4DCONV || ',' || game.HT4DATT || ',' || 
+					game.HTTYRDS || ',' || game.HTRYRDS || ',' || game.HTPYRDS || ',' || game.HTTO || ',' || game.HTSACKS || ',' || game.HTPEN || ',' || game.HTPENYRDS;
+					
+				insert into NFL_GAME_ERROR values (
+					sysdate,game.NFLWEEK,to_date(game.gameDate,'yyyy-mm-dd'),game.OTYN,game.ROADTEAM,game.HOMETEAM,data_error_msg,game_data_error_input
+				);
+				
+				DBMS_OUTPUT.PUT_LINE('   ******* There was an error ****** ' || data_error_msg);
+			end if;
+			
+			delete from nfl_game_stage gs where gs.gameDate = game.gameDate AND gs.OTYN = game.OTYN AND gs.ROADTEAM = game.ROADTEAM AND gs.HOMETEAM = game.HOMETEAM;
+			
+		end loop;
+		
+		commit;
+
+
+		
+	end NFL_GAME_DATA_LOAD;
+	
+   
+END NFLDATALOAD;
+
+/
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
